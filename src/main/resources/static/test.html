@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TaskManager</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.5.0/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #4A4A4A; color: #FFFFE3; min-height: 100vh; }
+    header { background: #2e2e2e; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 1.4rem; color: #FFFFE3; }
+    button { cursor: pointer; border: none; border-radius: 6px; padding: 8px 16px; font-size: 14px; }
+    .btn-primary { background: #6D8196; color: #FFFFE3; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; background: #6D8196; color: #FFFFE3; }
+    .btn-danger { background: #4A4A4A; color: #FFFFE3; border: 1px solid #CBCBCB; }
+    #auth-section, #app-section { padding: 2rem; max-width: 1200px; margin: 0 auto; }
+    .auth-box { background: #2e2e2e; padding: 2rem; border-radius: 10px; max-width: 400px; margin: 4rem auto; }
+    .auth-box h2 { margin-bottom: 1rem; color: #FFFFE3; }
+    .auth-box input { width: 100%; padding: 10px; margin: 8px 0; border-radius: 6px; border: 1px solid #CBCBCB; background: #4A4A4A; color: #FFFFE3; }
+    .auth-box .btn-primary { width: 100%; margin-top: 1rem; padding: 12px; }
+    .auth-toggle { text-align: center; margin-top: 1rem; color: #CBCBCB; cursor: pointer; }
+    .boards-grid { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }
+    .board-card { background: #2e2e2e; padding: 1rem; border-radius: 8px; cursor: pointer; min-width: 150px; border: 2px solid transparent; color: #FFFFE3; }
+    .board-card:hover { border-color: #6D8196; }
+    .kanban { display: flex; gap: 1rem; margin-top: 1rem; overflow-x: auto; }
+    .column { background: #2e2e2e; border-radius: 10px; padding: 1rem; min-width: 280px; flex-shrink: 0; }
+    .column h3 { margin-bottom: 1rem; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+    .column.todo h3 { color: #CBCBCB; }
+    .column.inprogress h3 { color: #6D8196; }
+    .column.done h3 { color: #FFFFE3; }
+    .task-card { background: #4A4A4A; border: 1px solid #CBCBCB; padding: 10px; border-radius: 6px; margin-bottom: 8px; cursor: grab; display: flex; justify-content: space-between; align-items: center; color: #FFFFE3; }
+    .task-card:active { cursor: grabbing; }
+    .add-task { display: flex; gap: 8px; margin-top: 1rem; }
+    .add-task input { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #CBCBCB; background: #4A4A4A; color: #FFFFE3; }
+    #back-btn { margin-bottom: 1rem; }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>TaskManager</h1>
+    <button class="btn-primary" id="logout-btn" style="display:none" onclick="logout()">Logout</button>
+</header>
+
+<div id="auth-section">
+    <div class="auth-box">
+        <h2 id="auth-title">Login</h2>
+        <input type="email" id="email" placeholder="Email">
+        <input type="password" id="password" placeholder="Password">
+        <button class="btn-primary" onclick="submitAuth()">Submit</button>
+        <p class="auth-toggle" onclick="toggleAuth()">Don't have an account? Register</p>
+    </div>
+</div>
+
+<div id="app-section" style="display:none">
+    <div id="boards-view">
+        <h2>My Boards</h2>
+        <div style="display:flex; gap:8px; margin-top:1rem">
+            <input id="new-board-title" placeholder="Board name..." style="padding:8px; border-radius:6px; border:1px solid #333; background:#1a1a2e; color:#eee;">
+            <button class="btn-primary" onclick="createBoard()">+ New Board</button>
+        </div>
+        <div class="boards-grid" id="boards-grid"></div>
+    </div>
+
+    <div id="kanban-view" style="display:none">
+        <button class="btn-sm" id="back-btn" onclick="showBoards()">← Back</button>
+        <h2 id="board-title"></h2>
+        <div class="kanban">
+            <div class="column todo">
+                <h3>To Do</h3>
+                <div id="col-TODO" class="task-list"></div>
+                <div class="add-task">
+                    <input id="new-task-TODO" placeholder="Add task...">
+                    <button class="btn-sm" onclick="createTask('TODO')">+</button>
+                </div>
+            </div>
+            <div class="column inprogress">
+                <h3>In Progress</h3>
+                <div id="col-IN_PROGRESS" class="task-list"></div>
+                <div class="add-task">
+                    <input id="new-task-IN_PROGRESS" placeholder="Add task...">
+                    <button class="btn-sm" onclick="createTask('IN_PROGRESS')">+</button>
+                </div>
+            </div>
+            <div class="column done">
+                <h3>Done</h3>
+                <div id="col-DONE" class="task-list"></div>
+                <div class="add-task">
+                    <input id="new-task-DONE" placeholder="Add task...">
+                    <button class="btn-sm" onclick="createTask('DONE')">+</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let token = localStorage.getItem('token');
+    let currentBoardId = null;
+    let isRegister = false;
+    let stompClient = null;
+
+    if (token) showApp();
+
+    function toggleAuth() {
+        isRegister = !isRegister;
+        document.getElementById('auth-title').innerText = isRegister ? 'Register' : 'Login';
+        document.querySelector('.auth-toggle').innerText = isRegister ? 'Already have an account? Login' : "Don't have an account? Register";
+    }
+
+    async function submitAuth() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const url = isRegister ? '/auth/register' : '/auth/login';
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const t = await res.text();
+        if (res.ok) { token = t; localStorage.setItem('token', t); showApp(); }
+        else alert('Auth failed: ' + t);
+    }
+
+    function showApp() {
+        document.getElementById('auth-section').style.display = 'none';
+        document.getElementById('app-section').style.display = 'block';
+        document.getElementById('logout-btn').style.display = 'block';
+        loadBoards();
+    }
+
+    function logout() {
+        token = null; localStorage.removeItem('token');
+        location.reload();
+    }
+
+    async function loadBoards() {
+        const res = await fetch('/boards', { headers: { 'Authorization': 'Bearer ' + token } });
+        const boards = await res.json();
+        const grid = document.getElementById('boards-grid');
+        grid.innerHTML = boards.map(b => `<div class="board-card" onclick="openBoard(${b.id}, '${b.title}')">${b.title || 'Untitled'}</div>`).join('');
+    }
+
+    async function createBoard() {
+        const title = document.getElementById('new-board-title').value;
+        await fetch('/boards', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) });
+        document.getElementById('new-board-title').value = '';
+        loadBoards();
+    }
+
+    async function openBoard(id, title) {
+        currentBoardId = id;
+        document.getElementById('board-title').innerText = title;
+        document.getElementById('boards-view').style.display = 'none';
+        document.getElementById('kanban-view').style.display = 'block';
+        await loadTasks();
+        connectWebSocket(id);
+    }
+
+    function showBoards() {
+        document.getElementById('boards-view').style.display = 'block';
+        document.getElementById('kanban-view').style.display = 'none';
+        if (stompClient) stompClient.disconnect();
+    }
+
+    async function loadTasks() {
+        const res = await fetch(`/boards/${currentBoardId}/tasks`, { headers: { 'Authorization': 'Bearer ' + token } });
+        const tasks = await res.json();
+        ['TODO', 'IN_PROGRESS', 'DONE'].forEach(s => document.getElementById('col-' + s).innerHTML = '');
+        tasks.forEach(t => addTaskCard(t));
+        setupDragDrop();
+    }
+
+    function addTaskCard(task) {
+        const col = document.getElementById('col-' + task.status);
+        if (!col) return;
+        const div = document.createElement('div');
+        div.className = 'task-card';
+        div.dataset.id = task.id;
+        div.dataset.status = task.status;
+        div.innerHTML = `<span>${task.title}</span><button class="btn-danger btn-sm" onclick="deleteTask(${task.id})">✕</button>`;
+        col.appendChild(div);
+    }
+
+    async function createTask(status) {
+        const input = document.getElementById('new-task-' + status);
+        const title = input.value.trim();
+        if (!title) return;
+        const res = await fetch(`/boards/${currentBoardId}/tasks`, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, status })
+        });
+        const task = await res.json();
+        task.status = status;
+        addTaskCard(task);
+        input.value = '';
+        setupDragDrop();
+        if (stompClient) stompClient.send('/app/board/' + currentBoardId, {}, JSON.stringify({ type: 'TASK_CREATED', data: task }));
+    }
+
+    async function deleteTask(id) {
+        await fetch(`/boards/${currentBoardId}/tasks/${id}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+        loadTasks();
+    }
+
+    function setupDragDrop() {
+        ['TODO', 'IN_PROGRESS', 'DONE'].forEach(status => {
+            const el = document.getElementById('col-' + status);
+            Sortable.create(el, {
+                group: 'tasks',
+                animation: 150,
+                onEnd: async function(evt) {
+                    const taskId = evt.item.dataset.id;
+                    const newStatus = evt.to.id.replace('col-', '');
+                    await fetch(`/boards/${currentBoardId}/tasks/${taskId}`, {
+                        method: 'PUT',
+                        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title: evt.item.querySelector('span').innerText, status: newStatus })
+                    });
+                    if (stompClient) stompClient.send('/app/board/' + currentBoardId, {}, JSON.stringify({ type: 'TASK_MOVED', data: { id: taskId, status: newStatus } }));
+                }
+            });
+        });
+    }
+
+    function connectWebSocket(boardId) {
+        const socket = new SockJS('/ws');
+        stompClient = Stomp.over(socket);
+        stompClient.connect({}, function() {
+            stompClient.subscribe('/topic/board/' + boardId, function(msg) {
+                loadTasks();
+            });
+        });
+    }
+</script>
+</body>
+</html>
